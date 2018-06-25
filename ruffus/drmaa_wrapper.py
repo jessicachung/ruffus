@@ -98,7 +98,7 @@ class error_drmaa_job(Exception):
 #   read_stdout_stderr_from_files
 
 #_________________________________________________________________________________________
-def read_stdout_stderr_from_files( stdout_path, stderr_path, logger = None, cmd_str = "", tries=5):
+def read_stdout_stderr_from_files( stdout_path, stderr_path, retain_stdout, retain_stderr, logger = None, cmd_str = "", tries=5):
     """
     Reads the contents of two specified paths and returns the strings
 
@@ -108,7 +108,7 @@ def read_stdout_stderr_from_files( stdout_path, stderr_path, logger = None, cmd_
 
         Logs error if files are missing: No big deal?
 
-        Cleans up files afterwards
+        Cleans up files afterwards, unless requested to keep them
 
         Returns tuple of stdout and stderr.
 
@@ -140,13 +140,20 @@ def read_stdout_stderr_from_files( stdout_path, stderr_path, logger = None, cmd_
         stderr = []
 
     #
-    #   cleanup ignoring errors
+    #   cleanup ignoring errors, unless requested to keep them
     #
-    try:
-        os.unlink( stdout_path )
-        os.unlink( stderr_path )
-    except OSError:
-        pass
+
+    if not retain_stdout:
+        try:
+            os.unlink( stdout_path )
+        except OSError:
+            pass
+
+    if not retain_stderr:
+        try:
+            os.unlink( stderr_path )
+        except OSError:
+            pass
 
     return stdout, stderr
 
@@ -263,8 +270,7 @@ def submit_drmaa_job(cmd_str, drmaa_session, job_template, logger):
 #   run_job_using_drmaa
 
 #_________________________________________________________________________________________
-def run_job_using_drmaa (cmd_str, job_name = None, job_other_options = "", job_script_directory = None, job_environment = None, working_directory = None, retain_job_scripts = False, logger = None, drmaa_session = None, verbose = 0, resubmit = 0):
-
+def run_job_using_drmaa (cmd_str, job_name = None, job_other_options = "", job_script_directory = None, job_environment = None, working_directory = None, retain_job_scripts = False, retain_stdout = False, retain_stderr = False, logger = None, drmaa_session = None, verbose = 0, resubmit = 0):
     """
     Runs specified command remotely using drmaa,
     either with the specified session, or the module shared drmaa session
@@ -299,7 +305,7 @@ def run_job_using_drmaa (cmd_str, job_name = None, job_other_options = "", job_s
     #   Run job and wait
     #
     if resubmit:
-        exitStatus = 1 
+        exitStatus = 1
         jobCount = 0
         while (exitStatus and jobCount < resubmit):
             try:
@@ -326,7 +332,7 @@ def run_job_using_drmaa (cmd_str, job_name = None, job_other_options = "", job_s
     #
     #   Read output
     #
-    stdout, stderr = read_stdout_stderr_from_files( stdout_path, stderr_path, logger, cmd_str)
+    stdout, stderr = read_stdout_stderr_from_files( stdout_path, stderr_path, retain_stdout, retain_stderr, logger, cmd_str)
 
 
     job_info_str = ("The original command was: >> %s <<\n"
@@ -360,7 +366,7 @@ def run_job_using_drmaa (cmd_str, job_name = None, job_other_options = "", job_s
                                    % (job_info.exitStatus, job_info_str + stderr_stdout_to_str (stderr, stdout)))
         elif job_info.hasExited:
             if job_info.exitStatus:
-                raise error_drmaa_job( "The drmaa command was terminated by signal %i:\n%s"
+                raise error_drmaa_job( "The drmaa command exited with status %i:\n%s"
                                          % (job_info.exitStatus, job_info_str + stderr_stdout_to_str (stderr, stdout)))
             #
             #   Decorate normal exit with some resource usage information
@@ -550,6 +556,7 @@ def touch_output_files (cmd_str, output_files, logger = None):
 def run_job(cmd_str, job_name = None, job_other_options = None, job_script_directory = None,
             job_environment = None, working_directory = None, logger = None,
             drmaa_session = None, retain_job_scripts = False,
+            retain_stdout = False, retain_stderr = False,
             run_locally = False, output_files = None, touch_only = False, verbose = 0, local_echo = False,
             resubmit = 0):
     """
@@ -563,4 +570,4 @@ def run_job(cmd_str, job_name = None, job_other_options = None, job_script_direc
     if run_locally:
         return run_job_locally (cmd_str, logger, job_environment, working_directory, local_echo)
 
-    return run_job_using_drmaa (cmd_str, job_name, job_other_options, job_script_directory, job_environment, working_directory, retain_job_scripts, logger, drmaa_session, verbose, resubmit)
+    return run_job_using_drmaa (cmd_str, job_name, job_other_options, job_script_directory, job_environment, working_directory, retain_job_scripts, retain_stdout, retain_stderr, logger, drmaa_session, verbose, resubmit)
